@@ -21,17 +21,26 @@ type JackalApi
     :<|> "progress" :> Get '[JSON] JackalProgress
 
 data TorrentProgress = TorrentProgress {
+    tpName :: String,
     tpCurrent :: Int,
     tpTotal :: Int
 }
 
 instance ToJSON TorrentProgress where
-    toJSON tp = object ["current" .= tpCurrent tp, "total" .= tpTotal tp]
-    toEncoding tp = pairs $ "current" .= tpCurrent tp <> "total" .= tpTotal tp
+    toJSON tp = object
+        [ "name" .= tpName tp
+        , "current" .= tpCurrent tp
+        , "total" .= tpTotal tp
+        ]
+    toEncoding tp = pairs
+        $  "name" .= tpName tp
+        <> "current" .= tpCurrent tp
+        <> "total" .= tpTotal tp
 
 instance FromJSON TorrentProgress where
     parseJSON = withObject "TorrentProgress" $ \v -> TorrentProgress
-        <$> v .: "current"
+        <$> v .: "name"
+        <*> v .: "current"
         <*> v .: "total"
 
 data Pending = Pending {

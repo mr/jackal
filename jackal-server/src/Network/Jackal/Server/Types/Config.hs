@@ -1,8 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Network.Jackal.Server.Types.Config
-    ( DownloadCommand(..)
-    , Settings(..)
+    ( Settings(..)
     , RTorrentSettings(..)
     , FTPSettings(..)
     ) where
@@ -16,12 +15,6 @@ import Data.Aeson
     , (.:?)
     , (.!=)
     )
-
--- TODO
--- Placeholder for sending commands to the download queue
--- Right now Start takes a filename and the others crash the app
-data DownloadCommand = Pause | Stop | Start String
-    deriving (Show)
 
 data Settings = Settings {
     sRTorrent :: RTorrentSettings,

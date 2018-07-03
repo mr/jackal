@@ -3,7 +3,23 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 module Network.Jackal.Server.App
-    ( App
+    ( ServerApp(..)
+    , ServerEnv(..)
+    , DownloadApp(..)
+    , DownloadEnv(..)
+    , MonadDownloadQueue
+    , modifyDownloadQueue
+    , readDownloadQueue
+    , setDownloadQueue
+    , MonadCommandChannel
+    , writeCommandChannel
+    , tryReadCommandChannel
+    , MonadDownloadThread
+    , pollDownloadThread
+    , HasManager
+    , getManager
+    , HasConfig
+    , getConfig
     ) where
 
 import Control.Concurrent.Async
@@ -39,33 +55,50 @@ import Network.HTTP.Conduit
 
 import Network.Jackal.Server.Types
 
-newtype App a = App { unApp :: ReaderT Env IO a } deriving
+newtype ServerApp a = ServerApp { unServerApp :: ReaderT ServerEnv IO a } deriving
     ( Functor
     , Applicative
     , Monad
-    , MonadReader Env
+    , MonadReader ServerEnv
     , MonadIO
     , MonadDownloadQueue
     , MonadCommandChannel
-    , MonadCommandChannelBroadcast
     , MonadDownloadThread
     )
 
-data Env = Env
-    { envDownloadQueue :: !(IORef DownloadQueue)     -- ^ Current download progress
-    , envCommandChannel :: !(TChan DownloadCommand)  -- ^ Reader channel for getting download commands
-    , envCommandChannelB :: !(TChan DownloadCommand) -- ^ Writer channel for sending downloading commands
-    , envDownloadThread :: !(Async ())               -- ^ Running download thread
-    , envConfig :: !Settings                         -- ^ Config
-    , envManager :: !Manager                         -- ^ Manager for HTTP requests
+newtype DownloadApp a = DownloadApp { unDownloadApp :: ReaderT DownloadEnv IO a } deriving
+    ( Functor
+    , Applicative
+    , Monad
+    , MonadReader DownloadEnv
+    , MonadIO
+    , MonadDownloadQueue
+    , MonadCommandChannel
+    )
+
+data ServerEnv = ServerEnv
+    { senvDownloadQueue :: !(IORef DownloadQueue)     -- ^ Current download progress
+    , senvCommandChannel :: !(TChan DownloadCommand)  -- ^ Writer channel for sending downloading commands
+    , senvDownloadThread :: !(Async ())               -- ^ Running download thread
+    , senvConfig :: !Settings                         -- ^ Config
+    , senvManager :: !Manager                         -- ^ Manager for HTTP requests
+    }
+
+data DownloadEnv = DownloadEnv
+    { denvDownloadQueue :: !(IORef DownloadQueue)     -- ^ Current download progress
+    , denvCommandChannel :: !(TChan DownloadCommand)  -- ^ Reader channel for getting download commands
+    , denvConfig :: !Settings                         -- ^ Config
+    , denvManager :: !Manager                         -- ^ Manager for HTTP requests
     }
 
 class HasDownloadQueue a where
     getDownloadQueue :: a -> IORef DownloadQueue
 instance HasDownloadQueue (IORef DownloadQueue) where
     getDownloadQueue = id
-instance HasDownloadQueue Env where
-    getDownloadQueue = envDownloadQueue
+instance HasDownloadQueue DownloadEnv where
+    getDownloadQueue = denvDownloadQueue
+instance HasDownloadQueue ServerEnv where
+    getDownloadQueue = senvDownloadQueue
 
 class Monad m => MonadDownloadQueue m where
     modifyDownloadQueue :: (DownloadQueue -> DownloadQueue) -> m ()
@@ -82,8 +115,10 @@ class HasCommandChannel a where
     getComandChannel :: a -> TChan DownloadCommand
 instance HasCommandChannel (TChan DownloadCommand) where
     getComandChannel = id
-instance HasCommandChannel Env where
-    getComandChannel = envCommandChannel
+instance HasCommandChannel DownloadEnv where
+    getComandChannel = denvCommandChannel
+instance HasCommandChannel ServerEnv where
+    getComandChannel = senvCommandChannel
 
 class Monad m => MonadCommandChannel m where
     writeCommandChannel :: DownloadCommand -> m ()
@@ -94,26 +129,12 @@ instance (HasCommandChannel env, MonadIO m) => MonadCommandChannel (ReaderT env 
         liftIO $ atomically $ writeTChan (getComandChannel env) dc
     tryReadCommandChannel = ask >>= liftIO . atomically . tryReadTChan . getComandChannel
 
-class HasCommandChannelBroadcast a where
-    getComandChannelBroadcast :: a -> TChan DownloadCommand
-instance HasCommandChannelBroadcast (TChan DownloadCommand) where
-    getComandChannelBroadcast = id
-instance HasCommandChannelBroadcast Env where
-    getComandChannelBroadcast = envCommandChannelB
-
-class Monad m => MonadCommandChannelBroadcast m where
-    broadcastCommandChannel :: DownloadCommand -> m ()
-instance (HasCommandChannelBroadcast env, MonadIO m) => MonadCommandChannelBroadcast (ReaderT env m) where
-    broadcastCommandChannel dc = do
-        env <- ask
-        liftIO $ atomically $ writeTChan (getComandChannelBroadcast env) dc
-
 class HasDownloadThread a where
     getDownloadThread :: a -> Async ()
 instance HasDownloadThread (Async ()) where
     getDownloadThread = id
-instance HasDownloadThread Env where
-    getDownloadThread = envDownloadThread
+instance HasDownloadThread ServerEnv where
+    getDownloadThread = senvDownloadThread
 
 class Monad m => MonadDownloadThread m where
     pollDownloadThread :: m (Maybe (Either E.SomeException ()))
@@ -124,12 +145,16 @@ class HasConfig a where
     getConfig :: a -> Settings
 instance HasConfig (Settings) where
     getConfig = id
-instance HasConfig Env where
-    getConfig = envConfig
+instance HasConfig DownloadEnv where
+    getConfig = denvConfig
+instance HasConfig ServerEnv where
+    getConfig = senvConfig
 
 class HasManager a where
     getManager :: a -> Manager
 instance HasManager (Manager) where
     getManager = id
-instance HasManager Env where
-    getManager = envManager
+instance HasManager DownloadEnv where
+    getManager = denvManager
+instance HasManager ServerEnv where
+    getManager = senvManager

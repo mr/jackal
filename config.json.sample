@@ -1,0 +1,15 @@
+{
+    "rtorrent": {
+        "user": "user",
+        "password": "pass",
+        "url": "https://my.host.com/xmlrpc"
+    },
+    "ftp": {
+        "user": "user",
+        "password": "pass",
+        "host": "my.host.com",
+        "home": "/home/user",
+        "destination": "/home/user/downloads",
+        "maxConnections": 4
+    }
+}

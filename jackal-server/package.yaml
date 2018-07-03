@@ -48,7 +48,7 @@ library:
   source-dirs: src
   exposed-modules:
     - Network.Jackal.Server
-#    - Network.Jackal.Server.Download
+    - Network.Jackal.Server.Download
     - Network.Jackal.Server.Types
     - Network.Jackal.Server.Types.Config
     - Network.Jackal.Server.RTorrent

@@ -1,6 +1,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Network.Jackal.Server.RTorrent (callRTorrentWithManager) where
+module Network.Jackal.Server.RTorrent (callRTorrentWithBasicAuth) where
 
 import qualified Control.Exception as E
 import Control.Exception.Safe
@@ -14,6 +14,7 @@ import Control.Monad.Except
     )
 import Control.Monad.IO.Class
     ( liftIO
+    , MonadIO
     )
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as LBS

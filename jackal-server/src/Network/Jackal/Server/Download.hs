@@ -1,12 +1,10 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Network.Jackal.Server.Download (
-    DownloadState(..),
     DownloadCommand(..),
     ftpsDownloadPath,
     download,
     downloadInit,
-    callRTorrentWithManager,
 ) where
 
 import Control.Concurrent.Async
@@ -35,6 +33,7 @@ import Data.List
 
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy.Char8 as LBC
+import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Map as Map
 
 import Data.Vector (Vector)
@@ -55,9 +54,12 @@ import Data.Maybe
     , isJust
     )
 import Control.Arrow ((***))
+import Network.RTorrent
+import Control.Monad.Reader
 
+import Network.Jackal.Server.RTorrent
 import Network.Jackal.Server.Types
-import network.Jackal.Server.App
+import Network.Jackal.Server.App
 
 printM :: (MonadIO m, Show s) => s -> m ()
 printM = liftIO . print
@@ -74,43 +76,22 @@ initDownloadQueue = DownloadQueue {
     dqTorrents = []
 }
 
-download
-    :: MonadIO m
-    => Manager
-    -> m
-        ( Event (Vector DownloadState)
-        , TChan DownloadCommand
-        , Async ()
-        )
-download m = do
-    (stateE, fire) <- newEvent
-    bcc <- liftIO newBroadcastTChanIO
-    cc <- liftIO $ atomically $ dupTChan bcc
-    dr <- liftIO $ async (downloadInit m fire cc)
-    return (stateE, bcc, dr)
-
-downloadInit
-    :: Manager
-    -> Handler (Vector DownloadState)
-    -> TChan DownloadCommand
-    -> IO ()
-downloadInit m fire cc = do
+download :: IO ServerEnv
+download = do
+    bcc <- newBroadcastTChanIO
+    cc <- atomically $ dupTChan bcc
+    dq <- newIORef initDownloadQueue
+    m <- newManager tlsManagerSettings
     configBS <- LBS.readFile "config.json"
-    case eitherDecode configBS of
-        Left err -> print err
-        Right settings -> downloadLoop m settings initDownloadQueue fire cc
+    let (Right settings) = eitherDecode configBS
+        denv = DownloadEnv dq cc settings m
+    dt <- async $ downloadInit denv
+    return $ ServerEnv dq bcc dt settings m
 
-downloadLoop
-    ::
-        ( MonadIO m
-        , MonadMask m
-        , MonadDownloadQueue m
-        , MonadCommandChannel m
-        , MonadReader env m
-        , HasConfig env
-        , HasManager env
-        )
-    => m ()
+downloadInit :: DownloadEnv -> IO ()
+downloadInit env = runReaderT (unDownloadApp downloadLoop) env
+
+downloadLoop :: DownloadApp ()
 downloadLoop = do
     -- get all commands that were sent
     -- and modify the download queue based on them
@@ -130,21 +111,12 @@ downloadLoop = do
             -- modify DQ based on completed torrents on the server
             updateQueue infos
     -- restart loop
-    downloadLoop m settings dq' fire cc
+    downloadLoop
 
-updateQueue
-    ::
-        ( MonadIO m
-        , MonadMask m
-        , MonadDownloadQueue m
-        , MonadReader env m
-        , HasConfig env
-        )
-    -> [TorrentInfo]
-    -> m ()
+updateQueue :: [TorrentInfo] -> DownloadApp ()
 updateQueue infos = do
     dq <- readDownloadQueue
-    settings <- sFTP <$> getConfig
+    settings <- sFTP . getConfig <$> ask
     -- Find IDs from RTorrent that we were already tracking and
     -- split into completed and uncompleted
     let oldQueueIDs = torrentId <$> dqTorrents dq
@@ -163,13 +135,13 @@ updateQueue infos = do
     -- Split the calculation jobs into finished
     -- and still running
     (willPend, stillCalculating) <- partitionM
-        (fmap isJust . poll . fcPath)
+        (fmap isJust . liftIO . poll . fcPath)
         allCalculating
 
     -- Get the new paths pending download by
     -- waiting on the finished calculation
     newPendings <- V.forM willPend $ \(FTPSCalc i calc) -> do
-        result <- waitCatch calc
+        result <- liftIO $ waitCatch calc
         return $ case result of
             Left _ -> V.fromList []
             Right x -> FTPSPending i <$> (V.fromList x)
@@ -177,7 +149,7 @@ updateQueue infos = do
     -- Remove completed downloads
     -- TODO add these to a completed queue
     (_, stillDownloading) <- partitionM
-        (fmap isJust . poll . fjResult)
+        (fmap isJust . liftIO . poll . fjResult)
         $ dqCurrent dq
 
     -- Take all the files we found and create a single list out of them
@@ -190,7 +162,7 @@ updateQueue infos = do
     }
 
     -- start FTPS jobs if there is room
-    let len = length $ dqCurrent dq'
+    let len = length $ dqCurrent dq
         maxConnections = ftpMaxConnections settings
     if len < maxConnections
         then enqueueFTPS
@@ -241,25 +213,17 @@ ftpsAllFiles h dir = do
                 then [FTP.mrFilename fileInfo]
                 else []
 
-enqueueFTPS
-    ::
-        ( MonadMask m
-        , MonadIO m
-        , MonadDownloadQueue m
-        , MonadReader env m
-        , HasConfig env
-        )
-    => m ()
+enqueueFTPS :: DownloadApp ()
 enqueueFTPS = do
     dq <- readDownloadQueue
-    ftpSettings@FTPSettings{..} <- getConfig <$> ask
+    Settings{..} <- getConfig <$> ask
     let len = length $ dqCurrent dq
-        n = ftpMaxConnections - len
+        n = (ftpMaxConnections sFTP) - len
         (enqueue, rest) = V.splitAt n (dqPending dq)
         ftransferring = dqCurrent dq
     started <- V.forM enqueue $ \(FTPSPending info path) -> do
         ftpsIORef <- liftIO $ newIORef 0
-        a <- liftIO $ async $ ftpsDownloadPath ftpSettings path ftpsIORef
+        a <- liftIO $ async $ ftpsDownloadPath sFTP path ftpsIORef
         return $ FTPSJob info ftpsIORef a
     setDownloadQueue $ dq {
         dqCurrent = ftransferring <> started,
@@ -301,12 +265,11 @@ bDict _ = Nothing
 
 startTorrent
     :: MonadIO m
-    => String
+    => BS.ByteString
     -> RTorrentSettings
     -> Manager
     -> m (Either String TorrentInfo)
-startTorrent filename rSettings m = do
-    tfile <- liftIO $ BS.readFile filename
+startTorrent tfile rSettings m = do
     case infoHash tfile of
         Nothing -> return $ Left "Invalid torrent file"
         Just hash -> do
@@ -315,26 +278,18 @@ startTorrent filename rSettings m = do
 
 -- Placeholder!! TODO
 -- This function will take a command and use it to modify the DownloadQueue
-performCommand ::
-    ( MonadDownloadQueue m
-    , MonadIO m
-    , MonadReader env m
-    , HasConfig env
-    , HasManager env
-    )
-    => DownloadCommand
-    -> m ()
-performCommand (Start filename)= do
+performCommand :: DownloadCommand -> DownloadApp ()
+performCommand (Start tfile)= do
     rtorrentConfig <- sRTorrent . getConfig <$> ask
     manager <- getManager <$> ask
-    eStartedInfo <- startTorrent filename rtorrentConfig manager
+    eStartedInfo <- startTorrent tfile rtorrentConfig manager
     case eStartedInfo of
         Right startedInfo -> modifyDownloadQueue $ \dq -> dq {
             dqTorrents = dqTorrents dq <> [startedInfo]
         }
         Left err -> do
-            putStrLn "Error starting torrent: "
-            print err
+            liftIO $ putStrLn "Error starting torrent: "
+            liftIO $ print err
 performCommand c = undefined
 
 -- TODO

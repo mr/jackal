@@ -1,77 +1,30 @@
 module Network.Jackal.Server.Types
-    ( CalculatingState(..)
-    , DownloadCommand(..)
+    ( DownloadCommand(..)
     , DownloadQueue(..)
-    , DownloadStage(..)
-    , DownloadState(..)
     , FTPSettings(..)
-    , FTPSState(..)
     , FTPSJob(..)
     , FTPSPending(..)
     , FTPSCalc(..)
-    , PendingState(..)
-    , PollResult
     , RTorrentSettings(..)
     , Settings(..)
-    , TorrentingState(..)
     ) where
 
-import Control.Concurrent.Async
-    ( Async
-    )
-
+import Control.Concurrent.Async (Async)
 import Control.Exception as E
-
-import Data.IORef
-    ( IORef
-    )
-
-import Data.Vector
-    ( Vector
-    )
-
+import Data.ByteString (ByteString)
+import Data.IORef (IORef)
+import Data.Vector (Vector)
 import Network.Jackal.Server.Types.Config
-    ( DownloadCommand(..)
-    , FTPSettings(..)
+    ( FTPSettings(..)
     , RTorrentSettings(..)
     , Settings(..)
     )
+import Network.RTorrent (TorrentInfo(..))
 
-import Network.RTorrent
-    ( TorrentInfo(..)
-    )
-
--- Is the torrent downloading or are we getting from FTPS
-data DownloadStage = Torrent | FTPS
-    deriving (Show, Eq)
-
-data TorrentingState = TorrentingState {
-    tsInfo :: TorrentInfo
-} deriving (Show, Eq)
-
-type PollResult a = Maybe (Either E.SomeException a)
-
-data FTPSState = FTPSState {
-    fsProgress :: Int,
-    fsResult :: PollResult Int
-} deriving (Show)
-
-data PendingState = PendingState {
-    psInfo :: TorrentInfo,
-    psPath :: String
-} deriving (Show)
-
-data CalculatingState = CalculatingState {
-    csInfo :: TorrentInfo,
-    csResult :: PollResult [String]
-} deriving (Show)
-
--- Communication of jobs to main thread
-data DownloadState
-    = DSTorrenting TorrentingState
-    | DSPending PendingState
-    | DSCalculating CalculatingState
-    | DSFTPS FTPSState
+-- TODO
+-- Placeholder for sending commands to the download queue
+-- Right now Start takes a filename and the others crash the app
+data DownloadCommand = Pause | Stop | Start ByteString
     deriving (Show)
 
 -- Torrent being downloaded, progress reference, async download job
