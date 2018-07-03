@@ -21,15 +21,37 @@ description:         Please see the README on GitHub at <https://github.com/gith
 
 dependencies:
 - base >= 4.7 && < 5
+- bencode
+- aeson
+- async
 - bytestring
+- conduit
+- containers
+- cryptonite
+- directory
+- filepath
+- ftp-client
+- ftp-client-conduit
+- haxr
+- http-conduit
 - jackal-api
+- mtl
+- rtorrent-rpc
+- safe-exceptions
 - servant-server
+- stm
+- vector
 - warp
 - wai
 
 library:
   source-dirs: src
-  exposed-modules: Network.Jackal.Server
+  exposed-modules:
+    - Network.Jackal.Server
+#    - Network.Jackal.Server.Download
+    - Network.Jackal.Server.Types
+    - Network.Jackal.Server.Types.Config
+    - Network.Jackal.Server.RTorrent
 
 executables:
   jackal-server-exe:

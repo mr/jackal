@@ -18,7 +18,7 @@
 #
 # resolver: ./custom-snapshot.yaml
 # resolver: https://example.com/snapshots/2018-01-01.yaml
-resolver: lts-11.15
+resolver: nightly-2018-06-29
 
 # User packages to be built.
 # Various formats can be used as shown in the example below.
@@ -34,7 +34,14 @@ resolver: lts-11.15
 #  - auto-update
 #  - wai
 packages:
-- .
+- jackal-api
+- jackal-client
+- jackal-server
+- ../rtorrent-rpc
+- ../HaXml
+- ../haxr
+- ../ftp-client/ftp-client
+- ../ftp-client/ftp-client-conduit
 # Dependency packages to be pulled from upstream that are not in the resolver
 # using the same syntax as the packages field.
 # (e.g., acme-missiles-0.3)
