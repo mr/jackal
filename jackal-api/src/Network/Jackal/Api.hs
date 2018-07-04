@@ -4,6 +4,7 @@
 
 module Network.Jackal.Api
     ( JackalApi
+    , jackalApi
     , TorrentProgress(..)
     , Pending(..)
     , Calculating(..)
@@ -19,6 +20,9 @@ import Servant
 type JackalApi
     =    "start" :> ReqBody '[OctetStream] ByteString :> Post '[JSON] NoContent
     :<|> "progress" :> Get '[JSON] JackalProgress
+
+jackalApi :: Proxy JackalApi
+jackalApi = Proxy
 
 data TorrentProgress = TorrentProgress {
     tpName :: String,

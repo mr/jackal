@@ -21,9 +21,26 @@ description:         Please see the README on GitHub at <https://github.com/gith
 
 dependencies:
 - base >= 4.7 && < 5
+- jackal-api
+- servant
+- servant-client
+- bytestring
+- gi-gtk
+- gi-glib
+- gi-gdk
+- haskell-gi-base
+- text
+- rtorrent-rpc
+- http-conduit
+- stm
+- async
+- vector
+- reactive-banana
+- reactive-banana-gi-gtk
 
 library:
   source-dirs: src
+  exposed-modules: Network.Jackal.Client
 
 executables:
   jackal-client-exe:

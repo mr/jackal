@@ -55,9 +55,6 @@ downloadQueueToJackalProgress DownloadQueue{..} = do
 appToHandler :: ServerEnv -> ServerApp a -> Handler a
 appToHandler env app = liftIO $ runReaderT (unServerApp app) env
 
-jackalApi :: Proxy JackalApi
-jackalApi = Proxy
-
 start :: ByteString -> ServerApp NoContent
 start torrent = do
     liftIO $ print "starting"
