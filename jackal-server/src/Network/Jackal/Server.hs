@@ -7,8 +7,11 @@ module Network.Jackal.Server
 import Control.Monad.IO.Class
 import Control.Monad.Reader
 import Data.ByteString (ByteString)
+import qualified Data.Map as Map
+import Data.Maybe (fromMaybe)
 import Data.IORef (readIORef)
 import qualified Data.Vector as V
+import Network.FTP.Client (MlsxResponse(..))
 import Network.Jackal.Api
 import Network.Jackal.Server.App
 import Network.Jackal.Server.Types
@@ -40,8 +43,9 @@ ftpsJobToProgress :: MonadIO m => FTPSJob -> m FtpProgress
 ftpsJobToProgress FTPSJob{..} = do
     progress <- liftIO $ readIORef fjProgress
     return $ FtpProgress {
+        fpName = torrentName fjInfo,
         fpCurrent = progress,
-        fpTotal = torrentSize fjInfo
+        fpTotal = read $ fromMaybe "0" $ Map.lookup "size" $ mrFacts fjMlsx
     }
 
 downloadQueueToJackalProgress :: MonadIO m => DownloadQueue -> m JackalProgress

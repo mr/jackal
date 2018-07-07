@@ -20,6 +20,7 @@ import Network.Jackal.Server.Types.Config
     , Settings(..)
     )
 import Network.RTorrent (TorrentInfo(..))
+import Network.FTP.Client (MlsxResponse(..))
 
 -- TODO
 -- Placeholder for sending commands to the download queue
@@ -30,18 +31,19 @@ data DownloadCommand = Pause | Stop | Start ByteString
 -- Torrent being downloaded, progress reference, async download job
 data FTPSJob = FTPSJob {
     fjInfo :: TorrentInfo,
+    fjMlsx :: MlsxResponse,
     fjProgress :: IORef Int,
     fjResult :: Async Int
 }
 
 data FTPSPending = FTPSPending {
     fpInfo :: TorrentInfo,
-    fpPath :: String
+    fpMlsx :: MlsxResponse
 } deriving (Show)
 
 data FTPSCalc = FTPSCalc {
     fcInfo :: TorrentInfo,
-    fcPath :: Async [String]
+    fcMlsx :: Async [MlsxResponse]
 }
 
 -- Current downloads

@@ -70,17 +70,26 @@ instance FromJSON Calculating where
     parseJSON = withObject "Calculating" $ \v -> Calculating <$> v .: "name"
 
 data FtpProgress = FtpProgress {
+    fpName :: String,
     fpCurrent :: Int,
     fpTotal :: Int
 }
 
 instance ToJSON FtpProgress where
-    toJSON fp = object ["current" .= fpCurrent fp, "total" .= fpTotal fp]
-    toEncoding fp = pairs $ "current" .= fpCurrent fp <> "total" .= fpTotal fp
+    toJSON fp = object
+        [ "name" .= fpName fp
+        , "current" .= fpCurrent fp
+        , "total" .= fpTotal fp
+        ]
+    toEncoding fp = pairs
+        $  "name" .= fpName fp
+        <> "current" .= fpCurrent fp
+        <> "total" .= fpTotal fp
 
 instance FromJSON FtpProgress where
     parseJSON = withObject "FtpProgress" $ \v -> FtpProgress
-        <$> v .: "current"
+        <$> v .: "name"
+        <*> v .: "current"
         <*> v .: "total"
 
 data JackalProgress = JackalProgress {

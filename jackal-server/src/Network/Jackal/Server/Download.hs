@@ -135,7 +135,7 @@ updateQueue infos = do
     -- Split the calculation jobs into finished
     -- and still running
     (willPend, stillCalculating) <- partitionM
-        (fmap isJust . liftIO . poll . fcPath)
+        (fmap isJust . liftIO . poll . fcMlsx)
         allCalculating
 
     -- Get the new paths pending download by
@@ -168,7 +168,7 @@ updateQueue infos = do
         then enqueueFTPS
         else return ()
 
-ftpsGetNewJobs :: FTPSettings -> TorrentInfo -> IO [String]
+ftpsGetNewJobs :: FTPSettings -> TorrentInfo -> IO [FTP.MlsxResponse]
 ftpsGetNewJobs FTPSettings{..} tInfo = do
     -- path is the root directory (or single file)
     -- we take the root off due to differences in RTorrent and the FTP server
@@ -180,7 +180,7 @@ ftpsGetNewJobs FTPSettings{..} tInfo = do
 
 -- This function walks the FTP server directory tree with MLS(T/D)
 -- It collects all files under the given path
-ftpsAllFiles :: FTP.Handle -> String -> IO [String]
+ftpsAllFiles :: FTP.Handle -> String -> IO [FTP.MlsxResponse]
 ftpsAllFiles h dir = do
     fileInfo <- FTP.mlst h dir
     printM fileInfo
@@ -204,13 +204,14 @@ ftpsAllFiles h dir = do
             let (filesL, dirsL) = partition isFile allFileInfo
                 files = prependRoot <$> filesL
                 dirs  = prependRoot <$> dirsL
+                filesMlsx = (\(name, resp) -> resp { FTP.mrFilename = name }) <$> zip files allFileInfo
             -- recursively find all files in directories we just found
             fileChildren <- mapM (ftpsAllFiles h) dirs
-            return $ files <> join fileChildren
+            return $ filesMlsx <> join fileChildren
         else
             -- single files should return just themselves
             return $ if isFile fileInfo
-                then [FTP.mrFilename fileInfo]
+                then [fileInfo]
                 else []
 
 enqueueFTPS :: DownloadApp ()
@@ -221,10 +222,10 @@ enqueueFTPS = do
         n = (ftpMaxConnections sFTP) - len
         (enqueue, rest) = V.splitAt n (dqPending dq)
         ftransferring = dqCurrent dq
-    started <- V.forM enqueue $ \(FTPSPending info path) -> do
+    started <- V.forM enqueue $ \(FTPSPending info mlsx) -> do
         ftpsIORef <- liftIO $ newIORef 0
-        a <- liftIO $ async $ ftpsDownloadPath sFTP path ftpsIORef
-        return $ FTPSJob info ftpsIORef a
+        a <- liftIO $ async $ ftpsDownloadPath sFTP (FTP.mrFilename mlsx) ftpsIORef
+        return $ FTPSJob info mlsx ftpsIORef a
     setDownloadQueue $ dq {
         dqCurrent = ftransferring <> started,
         dqPending = rest
