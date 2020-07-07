@@ -37,6 +37,9 @@ import qualified GI.Gtk as Gtk
 import Data.GI.Base.ManagedPtr
     ( castTo
     )
+import Data.GI.Base.GObject
+    ( gtypeFromInstance
+    )
 import GI.Gtk
     ( mainQuit
     , GObject(..)
@@ -178,7 +181,7 @@ driveListBox b listBox adapter = do
     reactimate' $ fmap adapt <$> sse
 
 printGType :: (GObject o) => o -> IO ()
-printGType = print <=< gtypeName <=< gobjectType
+printGType = print <=< gtypeName <=< gtypeFromInstance
 
 goodTail :: [a] -> [a]
 goodTail (_:xs) = xs
