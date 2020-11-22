@@ -78,6 +78,7 @@ initDownloadQueue = DownloadQueue {
 
 download :: IO ServerEnv
 download = do
+    putStrLn "Starting server"
     bcc <- newBroadcastTChanIO
     cc <- atomically $ dupTChan bcc
     dq <- newIORef initDownloadQueue
@@ -89,34 +90,30 @@ download = do
     return $ ServerEnv dq bcc dt settings m
 
 downloadInit :: DownloadEnv -> IO ()
-downloadInit env = runReaderT (unDownloadApp downloadLoop) env
+downloadInit = runReaderT (unDownloadApp downloadLoop)
 
 downloadLoop :: DownloadApp ()
 downloadLoop = do
     -- get all commands that were sent
     -- and modify the download queue based on them
     commandM <- tryReadCommandChannel
-    case commandM of
-        Just command -> performCommand command
-        Nothing -> return ()
+    forM_ commandM performCommand
 
-    m <- getManager <$> ask
-    settings <- getConfig <$> ask
+    m <- asks getManager
+    settings <- asks getConfig
 
     -- get all torrents from server to be filtered by TorrentID
     einfos <- callRTorrentWithBasicAuth m (sRTorrent settings) getTorrents
     case einfos of
         Left _ -> return ()
-        Right infos -> do
-            -- modify DQ based on completed torrents on the server
-            updateQueue infos
+        Right infos -> updateQueue infos
     -- restart loop
     downloadLoop
 
 updateQueue :: [TorrentInfo] -> DownloadApp ()
 updateQueue infos = do
     dq <- readDownloadQueue
-    settings <- sFTP . getConfig <$> ask
+    settings <- asks $ sFTP . getConfig
     -- Find IDs from RTorrent that we were already tracking and
     -- split into completed and uncompleted
     let oldQueueIDs = torrentId <$> dqTorrents dq
@@ -144,7 +141,7 @@ updateQueue infos = do
         result <- liftIO $ waitCatch calc
         return $ case result of
             Left _ -> V.fromList []
-            Right x -> FTPSPending i <$> (V.fromList x)
+            Right x -> FTPSPending i <$> V.fromList x
 
     -- Remove completed downloads
     -- TODO add these to a completed queue
@@ -164,9 +161,7 @@ updateQueue infos = do
     -- start FTPS jobs if there is room
     let len = length $ dqCurrent dq
         maxConnections = ftpMaxConnections settings
-    if len < maxConnections
-        then enqueueFTPS
-        else return ()
+    when (len < maxConnections) enqueueFTPS
 
 ftpsGetNewJobs :: FTPSettings -> TorrentInfo -> IO [FTP.MlsxResponse]
 ftpsGetNewJobs FTPSettings{..} tInfo = do
@@ -184,13 +179,10 @@ ftpsAllFiles :: FTP.Handle -> String -> IO [FTP.MlsxResponse]
 ftpsAllFiles h dir = do
     fileInfo <- FTP.mlst h dir
     printM fileInfo
-    let isType t = fromMaybe False
-            . fmap (== t)
-            . Map.lookup "type"
-            . FTP.mrFacts
+    let isType t = (== Just t) . Map.lookup "type" . FTP.mrFacts
         isFile = isType "file"
         isDir = isType "dir"
-        isntSpecialDir = \x -> (x /= ".") && (x /= "..")
+        isntSpecialDir x = (x /= ".") && (x /= "..")
         prependRoot = (FTP.mrFilename fileInfo </>) . FTP.mrFilename
     if isDir fileInfo
         then do
@@ -204,27 +196,30 @@ ftpsAllFiles h dir = do
             let (filesL, dirsL) = partition isFile allFileInfo
                 files = prependRoot <$> filesL
                 dirs  = prependRoot <$> dirsL
-                filesMlsx = (\(name, resp) -> resp { FTP.mrFilename = name }) <$> zip files allFileInfo
+                filesMlsx = (\(name, resp) ->
+                    resp {
+                        FTP.mrFilename = name
+                    }) <$> zip files allFileInfo
             -- recursively find all files in directories we just found
             fileChildren <- mapM (ftpsAllFiles h) dirs
             return $ filesMlsx <> join fileChildren
         else
             -- single files should return just themselves
-            return $ if isFile fileInfo
-                then [fileInfo]
-                else []
+            return $ [fileInfo | isFile fileInfo]
 
 enqueueFTPS :: DownloadApp ()
 enqueueFTPS = do
     dq <- readDownloadQueue
-    Settings{..} <- getConfig <$> ask
+    Settings{..} <- asks getConfig
     let len = length $ dqCurrent dq
-        n = (ftpMaxConnections sFTP) - len
+        n = ftpMaxConnections sFTP - len
         (enqueue, rest) = V.splitAt n (dqPending dq)
         ftransferring = dqCurrent dq
     started <- V.forM enqueue $ \(FTPSPending info mlsx) -> do
         ftpsIORef <- liftIO $ newIORef 0
-        a <- liftIO $ async $ ftpsDownloadPath sFTP (FTP.mrFilename mlsx) ftpsIORef
+        a <- liftIO
+            $ async
+            $ ftpsDownloadPath sFTP (FTP.mrFilename mlsx) ftpsIORef
         return $ FTPSJob info mlsx ftpsIORef a
     setDownloadQueue $ dq {
         dqCurrent = ftransferring <> started,
@@ -270,33 +265,42 @@ startTorrent
     -> RTorrentSettings
     -> Manager
     -> m (Either String TorrentInfo)
-startTorrent tfile rSettings m = do
+startTorrent tfile rSettings m =
     case infoHash tfile of
-        Nothing -> return $ Left "Invalid torrent file"
+        Nothing -> do
+            liftIO $ putStrLn "Bad torrent file"
+            return $ Left "Invalid torrent file"
         Just hash -> do
+            liftIO $ putStrLn "Loading raw torrent"
             callRTorrentWithBasicAuth m rSettings (loadStartTorrentRaw tfile)
+            liftIO $ putStrLn "Getting torrent info"
             callRTorrentWithBasicAuth m rSettings (getTorrent hash)
 
 -- Placeholder!! TODO
 -- This function will take a command and use it to modify the DownloadQueue
 performCommand :: DownloadCommand -> DownloadApp ()
 performCommand (Start tfile)= do
-    rtorrentConfig <- sRTorrent . getConfig <$> ask
-    manager <- getManager <$> ask
+    liftIO $ putStrLn "Starting torrent"
+    rtorrentConfig <- asks $ sRTorrent . getConfig
+    liftIO $ print rtorrentConfig
+    manager <- asks getManager
+    liftIO $ putStrLn "Got manager"
     eStartedInfo <- startTorrent tfile rtorrentConfig manager
+    liftIO $ putStrLn "Attempted to start torrent"
     case eStartedInfo of
-        Right startedInfo -> modifyDownloadQueue $ \dq -> dq {
-            dqTorrents = dqTorrents dq <> [startedInfo]
-        }
-        Left err -> do
-            liftIO $ putStrLn "Error starting torrent: "
-            liftIO $ print err
+        Right startedInfo -> do
+            liftIO $ putStrLn "Torrent started"
+            modifyDownloadQueue $ \dq -> dq {
+                dqTorrents = dqTorrents dq <> [startedInfo]
+            }
+        Left err ->
+            liftIO $ putStrLn $ "Error starting torrent: " <> show err
 performCommand c = undefined
 
 -- TODO
 -- This could be more efficient, consider a contribution to vector
 partitionM :: Monad m => (a -> m Bool) -> Vector a -> m (Vector a, Vector a)
-partitionM m xs = V.foldM foldFunc (V.fromList [], V.fromList []) xs
+partitionM m = V.foldM foldFunc (V.fromList [], V.fromList [])
     where
         foldFunc (vas, vbs) x = do
             res <- m x

@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+curl -X POST -H "Content-Type: application/octet-stream" --data-binary "@$1" "http://localhost:8080/start/"

@@ -2,3 +2,4 @@
 jackal-*.cabal
 config.json
 *~
+stack.yaml.lock
