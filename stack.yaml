@@ -47,6 +47,12 @@ extra-deps:
   - reactive-banana-1.2.1.0
   - reactive-banana-gi-gtk-0.4.1.0
   - bencode-0.6.1.1
+  - haskell-gi-base-0.24.4
+  - haskell-gi-0.24.5
+  - gi-glib-2.0.24
+  - gi-pango-1.0.23
+  - gi-harfbuzz-0.0.3
+  - gi-gtk-3.0.36
 
 # Override default flag values for local packages and extra-deps
 # flags: {}

@@ -285,6 +285,7 @@ performCommand (Start tfile)= do
     liftIO $ print rtorrentConfig
     manager <- asks getManager
     liftIO $ putStrLn "Got manager"
+    liftIO $ print tfile
     eStartedInfo <- startTorrent tfile rtorrentConfig manager
     liftIO $ putStrLn "Attempted to start torrent"
     case eStartedInfo of
