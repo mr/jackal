@@ -14,7 +14,6 @@ module Network.Jackal.Api
 
 import Data.Aeson
 import Data.ByteString (ByteString)
-import Data.Monoid
 import Servant
 
 type JackalApi

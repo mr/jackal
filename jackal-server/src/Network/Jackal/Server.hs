@@ -43,7 +43,7 @@ ftpsJobToProgress :: MonadIO m => FTPSJob -> m FtpProgress
 ftpsJobToProgress FTPSJob{..} = do
     progress <- liftIO $ readIORef fjProgress
     return $ FtpProgress {
-        fpName = torrentName fjInfo,
+        fpName = mrFilename fjMlsx,
         fpCurrent = progress,
         fpTotal = read $ fromMaybe "0" $ Map.lookup "size" $ mrFacts fjMlsx
     }

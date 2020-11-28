@@ -14,6 +14,8 @@ module Network.Jackal.Server.App
     , MonadCommandChannel
     , writeCommandChannel
     , tryReadCommandChannel
+    , HasDownloadThread
+    , getDownloadThread
     , MonadDownloadThread
     , pollDownloadThread
     , HasManager

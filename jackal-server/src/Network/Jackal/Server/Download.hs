@@ -13,38 +13,23 @@ import Control.Concurrent.STM.TChan
 import Control.Monad.STM
 import Network.HTTP.Conduit
 import Control.Monad.Except
-import qualified Control.Exception as E
-import Control.Exception.Safe (Exception, MonadMask, catches)
-import qualified Network.XmlRpc.Internals as Xml
-import Network.XmlRpc.Internals
-    ( MethodResponse(..)
-    , Value(..)
-    , MethodCall(..)
-    , renderCall
-    , parseResponse
-    , getType
-    )
 import Data.BEncode
 import Crypto.Hash
-import Data.Monoid ((<>))
 import Data.Aeson
 
 import Data.List
 
 import qualified Data.ByteString as BS
-import qualified Data.ByteString.Lazy.Char8 as LBC
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Map as Map
 
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 
-import Debug.Trace
 import qualified Network.FTP.Client as FTP
 import qualified Network.FTP.Client.Conduit as FC
 import Conduit
 
-import Data.Typeable
 
 import System.FilePath
 import System.Directory
@@ -53,7 +38,6 @@ import Data.Maybe
     ( fromMaybe
     , isJust
     )
-import Control.Arrow ((***))
 import Network.RTorrent
 import Control.Monad.Reader
 
@@ -127,7 +111,7 @@ updateQueue infos = do
         return $ FTPSCalc i calc
 
     -- Append new path calculation jobs to the existing list
-    let allCalculating = dqCalculating dq <> (V.fromList newCalculating)
+    let allCalculating = dqCalculating dq <> V.fromList newCalculating
 
     -- Split the calculation jobs into finished
     -- and still running
@@ -285,7 +269,6 @@ performCommand (Start tfile)= do
     liftIO $ print rtorrentConfig
     manager <- asks getManager
     liftIO $ putStrLn "Got manager"
-    liftIO $ print tfile
     eStartedInfo <- startTorrent tfile rtorrentConfig manager
     liftIO $ putStrLn "Attempted to start torrent"
     case eStartedInfo of

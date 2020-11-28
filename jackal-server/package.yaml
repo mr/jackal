@@ -48,6 +48,7 @@ library:
   source-dirs: src
   exposed-modules:
     - Network.Jackal.Server
+    - Network.Jackal.Server.App
     - Network.Jackal.Server.Download
     - Network.Jackal.Server.Types
     - Network.Jackal.Server.Types.Config
